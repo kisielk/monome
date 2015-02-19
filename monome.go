@@ -2,9 +2,9 @@ package monome
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/hypebeast/go-osc/osc"
@@ -73,7 +73,6 @@ func (c *oscConnection) send(address string, args ...interface{}) error {
 }
 
 func (c *oscConnection) sendMsg(m *osc.Message) error {
-	osc.PrintMessage(m)
 	return c.c.Send(m)
 }
 
@@ -155,7 +154,13 @@ type KeyEvent struct {
 
 type Device struct {
 	*oscConnection
-	Events chan KeyEvent
+	mu       sync.RWMutex
+	id       string
+	width    int32
+	height   int32
+	prefix   string
+	rotation int32
+	Events   chan KeyEvent
 }
 
 func DialDevice(address string, events chan KeyEvent) (*Device, error) {
@@ -163,8 +168,13 @@ func DialDevice(address string, events chan KeyEvent) (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &Device{conn, events}
+	d := &Device{oscConnection: conn, Events: events}
 	d.s.Handle("/manager/grid/key", d.handleKey)
+	d.s.Handle("/sys/port", d.handlePort)
+	d.s.Handle("/sys/id", d.handleId)
+	d.s.Handle("/sys/size", d.handleSize)
+	d.s.Handle("/sys/prefix", d.handlePrefix)
+	d.s.Handle("/sys/rotation", d.handleRotation)
 	host, port := d.HostPort()
 	err = d.send("/sys/host", host)
 	if err != nil {
@@ -176,11 +186,106 @@ func DialDevice(address string, events chan KeyEvent) (*Device, error) {
 		d.Close()
 		return nil, err
 	}
+	err = d.send("/sys/info")
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
 	return d, nil
 }
 
+func (d *Device) Height() int32 {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.height
+}
+
+func (d *Device) Width() int32 {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.width
+}
+
+func (d *Device) Id() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.id
+}
+
+func (d *Device) Prefix() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.prefix
+}
+
+func (d *Device) Rotation() int32 {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.rotation
+}
+
+func (d *Device) handlePort(msg *osc.Message) {
+	return
+}
+
+func (d *Device) handleId(msg *osc.Message) {
+	if msg.CountArguments() != 1 {
+		return
+	}
+	id, ok := msg.Arguments[0].(string)
+	if !ok {
+		return
+	}
+	d.mu.Lock()
+	d.id = id
+	d.mu.Unlock()
+}
+
+func (d *Device) handleSize(msg *osc.Message) {
+	if msg.CountArguments() != 2 {
+		return
+	}
+	width, ok := msg.Arguments[0].(int32)
+	if !ok {
+		return
+	}
+	height, ok := msg.Arguments[1].(int32)
+	if !ok {
+		return
+	}
+	d.mu.Lock()
+	d.width = width
+	d.height = height
+	d.mu.Unlock()
+}
+
+func (d *Device) handlePrefix(msg *osc.Message) {
+	if msg.CountArguments() != 1 {
+		return
+	}
+	prefix, ok := msg.Arguments[0].(string)
+	if !ok {
+		return
+	}
+	d.mu.Lock()
+	d.prefix = prefix
+	d.mu.Unlock()
+}
+
+func (d *Device) handleRotation(msg *osc.Message) {
+	if msg.CountArguments() != 1 {
+		return
+	}
+	rotation, ok := msg.Arguments[0].(int32)
+	if !ok {
+		return
+	}
+	d.mu.Lock()
+	d.rotation = rotation
+	d.mu.Unlock()
+}
+
 func (d *Device) handleKey(msg *osc.Message) {
-	fmt.Println(msg)
 	if msg.CountArguments() != 3 {
 		return
 	}
