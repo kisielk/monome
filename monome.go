@@ -320,10 +320,10 @@ func (d *Device) handleKey(msg *osc.Message) {
 	d.Events <- event
 }
 
-func statesInterfaces(states []uint8) []interface{} {
+func statesInterfaces(states []byte) []interface{} {
 	in := make([]interface{}, len(states))
 	for i := range states {
-		in[i] = states[i]
+		in[i] = int32(states[i])
 	}
 	return in
 }
@@ -344,19 +344,19 @@ func (d *Device) All(state int) error {
 	return d.send(d.Prefix()+"/grid/led/all", state)
 }
 
-func (d *Device) Map(xOffset, yOffset int, states [8]uint8) error {
+func (d *Device) Map(xOffset, yOffset int, states [8]byte) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/map", xOffset, yOffset)
 	m.Append(statesInterfaces(states[:])...)
 	return d.sendMsg(m)
 }
 
-func (d *Device) Rows(xOffset, y int, states ...uint8) error {
+func (d *Device) Rows(xOffset, y int, states ...byte) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/row", xOffset, y)
 	m.Append(statesInterfaces(states)...)
 	return d.sendMsg(m)
 }
 
-func (d *Device) Cols(x, yOffset int, states ...uint8) error {
+func (d *Device) Cols(x, yOffset int, states ...byte) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/row", x, yOffset)
 	m.Append(statesInterfaces(states)...)
 	return d.sendMsg(m)
