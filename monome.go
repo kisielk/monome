@@ -14,7 +14,7 @@ var ErrTimeout = errors.New("connection timed out")
 
 // Connect is a utility method that establishes a connection to the first monome device it finds.
 // The device sends key events to the given channel.
-func Connect(keyEvents chan KeyEvent) (*Device, error) {
+func Connect(prefix string, keyEvents chan KeyEvent) (*Device, error) {
 	deviceEvents := make(chan DeviceEvent)
 	so, err := DialSerialOsc("", deviceEvents)
 	if err != nil {
@@ -27,7 +27,7 @@ func Connect(keyEvents chan KeyEvent) (*Device, error) {
 	}
 	select {
 	case ev := <-deviceEvents:
-		return DialDevice(":"+strconv.Itoa(int(ev.Port)), keyEvents)
+		return DialDevice(":"+strconv.Itoa(int(ev.Port)), prefix, keyEvents)
 	case <-time.After(5 * time.Second):
 		return nil, ErrTimeout
 	}
@@ -163,13 +163,20 @@ type Device struct {
 	Events   chan KeyEvent
 }
 
-func DialDevice(address string, events chan KeyEvent) (*Device, error) {
+func DialDevice(address, prefix string, events chan KeyEvent) (*Device, error) {
 	conn, err := newOscConnection(address)
 	if err != nil {
 		return nil, err
 	}
-	d := &Device{oscConnection: conn, Events: events}
-	d.s.Handle("/manager/grid/key", d.handleKey)
+	if prefix == "" {
+		prefix = "/gopher"
+	}
+	d := &Device{
+		oscConnection: conn,
+		prefix:        prefix,
+		Events:        events,
+	}
+	d.s.Handle(prefix+"/grid/key", d.handleKey)
 	d.s.Handle("/sys/port", d.handlePort)
 	d.s.Handle("/sys/id", d.handleId)
 	d.s.Handle("/sys/size", d.handleSize)
@@ -182,6 +189,11 @@ func DialDevice(address string, events chan KeyEvent) (*Device, error) {
 		return nil, err
 	}
 	err = d.send("/sys/port", int32(port))
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	err = d.send("/sys/prefix", prefix)
 	if err != nil {
 		d.Close()
 		return nil, err
@@ -325,57 +337,57 @@ func levelsInterfaces(levels []int) []interface{} {
 }
 
 func (d *Device) Set(x, y, state int32) error {
-	return d.send("/manager/grid/led/set", x, y, state)
+	return d.send(d.Prefix()+"/grid/led/set", x, y, state)
 }
 
 func (d *Device) All(state int) error {
-	return d.send("/grid/led/all", state)
+	return d.send(d.Prefix()+"/grid/led/all", state)
 }
 
 func (d *Device) Map(xOffset, yOffset int, states [8]uint8) error {
-	m := osc.NewMessage("/grid/led/map", xOffset, yOffset)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/map", xOffset, yOffset)
 	m.Append(statesInterfaces(states[:])...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) Rows(xOffset, y int, states ...uint8) error {
-	m := osc.NewMessage("/grid/led/row", xOffset, y)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/row", xOffset, y)
 	m.Append(statesInterfaces(states)...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) Cols(x, yOffset int, states ...uint8) error {
-	m := osc.NewMessage("/grid/led/row", x, yOffset)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/row", x, yOffset)
 	m.Append(statesInterfaces(states)...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) Intensity(i int) error {
-	return d.send("/grid/led/intensity", i)
+	return d.send(d.Prefix()+"/grid/led/intensity", i)
 }
 
 func (d *Device) Level(x, y int, level int) error {
-	return d.send("/grid/led/level/set", x, y, level)
+	return d.send(d.Prefix()+"/grid/led/level/set", x, y, level)
 }
 
 func (d *Device) LevelAll(level int) error {
-	return d.send("/grid/led/level/all", level)
+	return d.send(d.Prefix()+"/grid/led/level/all", level)
 }
 
 func (d *Device) LevelMap(xOffset, yOffset int, levels [64]int) error {
-	m := osc.NewMessage("/grid/led/level/map", xOffset, yOffset)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/level/map", xOffset, yOffset)
 	m.Append(levelsInterfaces(levels[:])...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) LevelRows(xOffset, y int, levels []int) error {
-	m := osc.NewMessage("/grid/led/level/row", xOffset, y)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/level/row", xOffset, y)
 	m.Append(levelsInterfaces(levels)...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) LevelCols(x, yOffset int, levels []int) error {
-	m := osc.NewMessage("/grid/led/level/col", x, yOffset)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/level/col", x, yOffset)
 	m.Append(levelsInterfaces(levels)...)
 	return d.sendMsg(m)
 }

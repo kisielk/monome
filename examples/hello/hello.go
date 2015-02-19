@@ -10,7 +10,7 @@ import (
 
 func main() {
 	keyEvents := make(chan monome.KeyEvent)
-	device, err := monome.Connect(keyEvents)
+	device, err := monome.Connect("/hello", keyEvents)
 	if err != nil {
 		log.Fatal(err)
 	}
