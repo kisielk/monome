@@ -88,7 +88,7 @@ type SerialOsc struct {
 type DeviceEvent struct {
 	Id      string
 	Type    string
-	Port    int32
+	Port    int
 	Removed bool
 }
 
@@ -138,7 +138,8 @@ func (s *SerialOsc) handleDeviceEvent(msg *osc.Message) (event DeviceEvent, ok b
 	if !ok {
 		return
 	}
-	event.Port, ok = msg.Arguments[2].(int32)
+	port, ok := msg.Arguments[2].(int32)
+	event.Port = int(port)
 	return
 }
 
@@ -147,19 +148,19 @@ type KeyHandler interface {
 }
 
 type KeyEvent struct {
-	X     int32
-	Y     int32
-	State int32
+	X     int
+	Y     int
+	State int
 }
 
 type Device struct {
 	*oscConnection
 	mu       sync.RWMutex
 	id       string
-	width    int32
-	height   int32
+	width    int
+	height   int
 	prefix   string
-	rotation int32
+	rotation int
 	Events   chan KeyEvent
 }
 
@@ -206,13 +207,13 @@ func DialDevice(address, prefix string, events chan KeyEvent) (*Device, error) {
 	return d, nil
 }
 
-func (d *Device) Height() int32 {
+func (d *Device) Height() int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.height
 }
 
-func (d *Device) Width() int32 {
+func (d *Device) Width() int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.width
@@ -230,7 +231,7 @@ func (d *Device) Prefix() string {
 	return d.prefix
 }
 
-func (d *Device) Rotation() int32 {
+func (d *Device) Rotation() int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.rotation
@@ -266,8 +267,8 @@ func (d *Device) handleSize(msg *osc.Message) {
 		return
 	}
 	d.mu.Lock()
-	d.width = width
-	d.height = height
+	d.width = int(width)
+	d.height = int(height)
 	d.mu.Unlock()
 }
 
@@ -293,7 +294,7 @@ func (d *Device) handleRotation(msg *osc.Message) {
 		return
 	}
 	d.mu.Lock()
-	d.rotation = rotation
+	d.rotation = int(rotation)
 	d.mu.Unlock()
 }
 
@@ -301,23 +302,19 @@ func (d *Device) handleKey(msg *osc.Message) {
 	if msg.CountArguments() != 3 {
 		return
 	}
-	var (
-		event KeyEvent
-		ok    bool
-	)
-	event.X, ok = msg.Arguments[0].(int32)
+	x, ok := msg.Arguments[0].(int32)
 	if !ok {
 		return
 	}
-	event.Y, ok = msg.Arguments[1].(int32)
+	y, ok := msg.Arguments[1].(int32)
 	if !ok {
 		return
 	}
-	event.State = msg.Arguments[2].(int32)
+	state, ok := msg.Arguments[2].(int32)
 	if !ok {
 		return
 	}
-	d.Events <- event
+	d.Events <- KeyEvent{int(x), int(y), int(state)}
 }
 
 func statesInterfaces(states []byte) []interface{} {
@@ -331,63 +328,63 @@ func statesInterfaces(states []byte) []interface{} {
 func levelsInterfaces(levels []int) []interface{} {
 	in := make([]interface{}, len(levels))
 	for i := range levels {
-		in[i] = levels[i]
+		in[i] = int32(levels[i])
 	}
 	return in
 }
 
-func (d *Device) Set(x, y, state int32) error {
-	return d.send(d.Prefix()+"/grid/led/set", x, y, state)
+func (d *Device) Set(x, y, state int) error {
+	return d.send(d.Prefix()+"/grid/led/set", int32(x), int32(y), int32(state))
 }
 
 func (d *Device) All(state int) error {
-	return d.send(d.Prefix()+"/grid/led/all", state)
+	return d.send(d.Prefix()+"/grid/led/all", int32(state))
 }
 
 func (d *Device) Map(xOffset, yOffset int, states [8]byte) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/map", xOffset, yOffset)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/map", int32(xOffset), int32(yOffset))
 	m.Append(statesInterfaces(states[:])...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) Rows(xOffset, y int, states ...byte) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/row", xOffset, y)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/row", int32(xOffset), int32(y))
 	m.Append(statesInterfaces(states)...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) Cols(x, yOffset int, states ...byte) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/row", x, yOffset)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/row", int32(x), int32(yOffset))
 	m.Append(statesInterfaces(states)...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) Intensity(i int) error {
-	return d.send(d.Prefix()+"/grid/led/intensity", i)
+	return d.send(d.Prefix()+"/grid/led/intensity", int32(i))
 }
 
-func (d *Device) Level(x, y int, level int) error {
-	return d.send(d.Prefix()+"/grid/led/level/set", x, y, level)
+func (d *Device) Level(x, y, level int) error {
+	return d.send(d.Prefix()+"/grid/led/level/set", int32(x), int32(y), int32(level))
 }
 
 func (d *Device) LevelAll(level int) error {
-	return d.send(d.Prefix()+"/grid/led/level/all", level)
+	return d.send(d.Prefix()+"/grid/led/level/all", int32(level))
 }
 
 func (d *Device) LevelMap(xOffset, yOffset int, levels [64]int) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/level/map", xOffset, yOffset)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/level/map", int32(xOffset), int32(yOffset))
 	m.Append(levelsInterfaces(levels[:])...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) LevelRows(xOffset, y int, levels []int) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/level/row", xOffset, y)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/level/row", int32(xOffset), int32(y))
 	m.Append(levelsInterfaces(levels)...)
 	return d.sendMsg(m)
 }
 
 func (d *Device) LevelCols(x, yOffset int, levels []int) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/level/col", x, yOffset)
+	m := osc.NewMessage(d.Prefix()+"/grid/led/level/col", int32(x), int32(yOffset))
 	m.Append(levelsInterfaces(levels)...)
 	return d.sendMsg(m)
 }

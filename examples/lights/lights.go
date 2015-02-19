@@ -23,7 +23,7 @@ func main() {
 	fmt.Printf("Connected to monome id: %s, prefix: %s, width: %d, height: %d, rotation: %d\n",
 		device.Id(), device.Prefix(), device.Width(), device.Height(), device.Rotation())
 
-	width, height := int(device.Width()), int(device.Height())
+	width, height := device.Width(), device.Height()
 
 	ticker := time.NewTicker(2 * time.Second)
 	row := make([]byte, width/8)
