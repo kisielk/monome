@@ -1,3 +1,4 @@
+// Package monome implements an OSC interfaces to monome devices from monome.org
 package monome
 
 import (
@@ -10,10 +11,18 @@ import (
 	"github.com/hypebeast/go-osc/osc"
 )
 
-var ErrTimeout = errors.New("connection timed out")
+var (
+	// ConnectTimeout sets the timeout used by the Connect function.
+	// It should not need to be changed in most cases.
+	ConnectTimeout = 5 * time.Second
+
+	// ErrTimeout is returned when the connection to a device cannot be established.
+	ErrTimeout = errors.New("connection timed out")
+)
 
 // Connect is a utility method that establishes a connection to the first monome device it finds.
 // The device sends key events to the given channel.
+// It returns ErrTimeout if it can't connec to a device.
 func Connect(prefix string, keyEvents chan KeyEvent) (*Device, error) {
 	deviceEvents := make(chan DeviceEvent)
 	so, err := DialSerialOsc("", deviceEvents)
@@ -27,12 +36,25 @@ func Connect(prefix string, keyEvents chan KeyEvent) (*Device, error) {
 	}
 	select {
 	case ev := <-deviceEvents:
-		return DialDevice(":"+strconv.Itoa(int(ev.Port)), prefix, keyEvents)
-	case <-time.After(5 * time.Second):
+		d, err := DialDevice(":"+strconv.Itoa(int(ev.Port)), prefix, keyEvents)
+		if err != nil {
+			return nil, err
+		}
+		// Wait for the Id to become populated.
+		for i := 0; i < 100; i++ {
+			id := d.Id()
+			if id != "" {
+				return d, nil
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return nil, ErrTimeout
+	case <-time.After(ConnectTimeout):
 		return nil, ErrTimeout
 	}
 }
 
+// oscConnection is a bi-directional OSC connection
 type oscConnection struct {
 	c          *osc.Client
 	s          *osc.Server
@@ -61,6 +83,7 @@ func newOscConnection(address string) (*oscConnection, error) {
 	}, nil
 }
 
+// HostPort returns the local OSC server host and port.
 func (c *oscConnection) HostPort() (string, int) {
 	host, p, _ := net.SplitHostPort(c.serverConn.LocalAddr().String())
 	port, _ := strconv.Atoi(p)
@@ -76,22 +99,28 @@ func (c *oscConnection) sendMsg(m *osc.Message) error {
 	return c.c.Send(m)
 }
 
+// Close terminates the OSC connection.
 func (c *oscConnection) Close() error {
 	return c.serverConn.Close()
 }
 
+// SerialOsc represents an OSC connection to the monome "serialosc" application.
 type SerialOsc struct {
 	*oscConnection
-	Events chan DeviceEvent
+	events chan DeviceEvent
 }
 
+// A DeviceEvent is a Monome device connection or disconnection event.
 type DeviceEvent struct {
 	Id      string
 	Type    string
 	Port    int
-	Removed bool
+	Removed bool // True if the device is being disconnected, otherwise false.
 }
 
+// DialSerialOsc creates a connection to a serialosc instance at the given address.
+// If an empty address is given it defaults to localhost:12002
+// Device add and remove events are sent to the given channel.
 func DialSerialOsc(address string, events chan DeviceEvent) (*SerialOsc, error) {
 	if address == "" {
 		address = "localhost:12002"
@@ -104,6 +133,8 @@ func DialSerialOsc(address string, events chan DeviceEvent) (*SerialOsc, error) 
 	return s, err
 }
 
+// List requests a list of all monome devices serialosc is aware of.
+// The results are sent to the DeviceEvent channel the connetion was initialized with.
 func (s *SerialOsc) List() error {
 	host, port := s.HostPort()
 	return s.send("/serialosc/list", host, int32(port))
@@ -114,7 +145,7 @@ func (s *SerialOsc) handleAdd(msg *osc.Message) {
 	if !ok {
 		return
 	}
-	s.Events <- event
+	s.events <- event
 }
 
 func (s *SerialOsc) handleRemove(msg *osc.Message) {
@@ -123,7 +154,7 @@ func (s *SerialOsc) handleRemove(msg *osc.Message) {
 		return
 	}
 	event.Removed = true
-	s.Events <- event
+	s.events <- event
 }
 
 func (s *SerialOsc) handleDeviceEvent(msg *osc.Message) (event DeviceEvent, ok bool) {
@@ -143,16 +174,14 @@ func (s *SerialOsc) handleDeviceEvent(msg *osc.Message) (event DeviceEvent, ok b
 	return
 }
 
-type KeyHandler interface {
-	HandleKey(x, y, s int)
-}
-
+// A KeyEvent is received for every key down or key up on a Monome device.
 type KeyEvent struct {
 	X     int
 	Y     int
-	State int
+	State int // 1 for down, 0 for up.
 }
 
+// Device represents a connection to a Monome device.
 type Device struct {
 	*oscConnection
 	mu       sync.RWMutex
@@ -161,9 +190,14 @@ type Device struct {
 	height   int
 	prefix   string
 	rotation int
-	Events   chan KeyEvent
+	events   chan KeyEvent
 }
 
+// DialDevice connects to a Monome device using the given address.
+// The address can be obtained from a SerialOsc.
+// prefix is the OSC address prefix to be used by the local OSC server.
+// If an empty prefix is given, it defaults to /gopher.
+// KeyEvents which are received will be sent in to the given events channel.
 func DialDevice(address, prefix string, events chan KeyEvent) (*Device, error) {
 	conn, err := newOscConnection(address)
 	if err != nil {
@@ -175,7 +209,7 @@ func DialDevice(address, prefix string, events chan KeyEvent) (*Device, error) {
 	d := &Device{
 		oscConnection: conn,
 		prefix:        prefix,
-		Events:        events,
+		events:        events,
 	}
 	d.s.Handle(prefix+"/grid/key", d.handleKey)
 	d.s.Handle("/sys/port", d.handlePort)
@@ -207,30 +241,35 @@ func DialDevice(address, prefix string, events chan KeyEvent) (*Device, error) {
 	return d, nil
 }
 
+// Height returns the height of the connected Monome device.
 func (d *Device) Height() int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.height
 }
 
+// Width returns the width of the connected Monome device.
 func (d *Device) Width() int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.width
 }
 
+// Id returns the id of the connected Monome device.
 func (d *Device) Id() string {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.id
 }
 
+// Prefix returns the OSC prefinx being used in communication with the connected Monome device.
 func (d *Device) Prefix() string {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.prefix
 }
 
+// Rotation returns the rotation of the connected Monome device.
 func (d *Device) Rotation() int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -314,7 +353,7 @@ func (d *Device) handleKey(msg *osc.Message) {
 	if !ok {
 		return
 	}
-	d.Events <- KeyEvent{int(x), int(y), int(state)}
+	d.events <- KeyEvent{int(x), int(y), int(state)}
 }
 
 func statesInterfaces(states []byte) []interface{} {
@@ -333,57 +372,70 @@ func levelsInterfaces(levels []int) []interface{} {
 	return in
 }
 
-func (d *Device) Set(x, y, state int) error {
+// LEDSet sets the LED at (x, y) to the given state.
+// State must be 1 for on or 0 for off.
+func (d *Device) LEDSet(x, y, state int) error {
 	return d.send(d.Prefix()+"/grid/led/set", int32(x), int32(y), int32(state))
 }
 
-func (d *Device) All(state int) error {
+// LEDAll sets all LEDs to the given state.
+// State must be 1 for on or 0 for off.
+func (d *Device) LEDAll(state int) error {
 	return d.send(d.Prefix()+"/grid/led/all", int32(state))
 }
 
-func (d *Device) Map(xOffset, yOffset int, states [8]byte) error {
+// LEDMap sets an 8x8 grid of LEDs on the monome to the given states.
+// The states are a bitmask with each byte representing one row and each bit representing the state of an LED in that row.
+// xOffset and yOffset must be multiples of 8.
+func (d *Device) LEDMap(xOffset, yOffset int, states [8]byte) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/map", int32(xOffset), int32(yOffset))
 	m.Append(statesInterfaces(states[:])...)
 	return d.sendMsg(m)
 }
 
-func (d *Device) Rows(xOffset, y int, states ...byte) error {
+func (d *Device) LEDRow(xOffset, y int, states ...byte) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/row", int32(xOffset), int32(y))
 	m.Append(statesInterfaces(states)...)
 	return d.sendMsg(m)
 }
 
-func (d *Device) Cols(x, yOffset int, states ...byte) error {
+func (d *Device) LEDCol(x, yOffset int, states ...byte) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/row", int32(x), int32(yOffset))
 	m.Append(statesInterfaces(states)...)
 	return d.sendMsg(m)
 }
 
-func (d *Device) Intensity(i int) error {
+// LEDIntensity sets the intensity of the grid LEDs.
+func (d *Device) LEDIntensity(i int) error {
 	return d.send(d.Prefix()+"/grid/led/intensity", int32(i))
 }
 
-func (d *Device) Level(x, y, level int) error {
+// LEDLevel sets the level of the LED at coordinates x, y. The value of level must be in the range [0, 15].
+func (d *Device) LEDLevel(x, y, level int) error {
 	return d.send(d.Prefix()+"/grid/led/level/set", int32(x), int32(y), int32(level))
 }
 
-func (d *Device) LevelAll(level int) error {
+// LEDLevelAll sets the level of all LEDs.
+func (d *Device) LEDLevelAll(level int) error {
 	return d.send(d.Prefix()+"/grid/led/level/all", int32(level))
 }
 
-func (d *Device) LevelMap(xOffset, yOffset int, levels [64]int) error {
+// LEDLevelMap is like LEDMap but with control over the level.
+func (d *Device) LEDLevelMap(xOffset, yOffset int, levels [64]int) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/level/map", int32(xOffset), int32(yOffset))
 	m.Append(levelsInterfaces(levels[:])...)
 	return d.sendMsg(m)
 }
 
-func (d *Device) LevelRows(xOffset, y int, levels []int) error {
+// LEDLevelRow is like LEDRow but with control over the level.
+func (d *Device) LEDLevelRow(xOffset, y int, levels []int) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/level/row", int32(xOffset), int32(y))
 	m.Append(levelsInterfaces(levels)...)
 	return d.sendMsg(m)
 }
 
-func (d *Device) LevelCols(x, yOffset int, levels []int) error {
+// LEDLevelRow is like LEDCol but with control over the level.
+func (d *Device) LEDLevelCol(x, yOffset int, levels []int) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/level/col", int32(x), int32(yOffset))
 	m.Append(levelsInterfaces(levels)...)
 	return d.sendMsg(m)

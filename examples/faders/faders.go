@@ -16,9 +16,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer device.Close()
-
-	// Wait for monome to send its info.
-	time.Sleep(1 * time.Second)
 	fmt.Printf("Connected to monome id: %s, prefix: %s, width: %d, height: %d, rotation: %d\n",
 		device.Id(), device.Prefix(), device.Width(), device.Height(), device.Rotation())
 
@@ -53,7 +50,7 @@ func main() {
 						}
 						col[i] = level
 					}
-					device.LevelCols(x, 0, col)
+					device.LEDLevelCol(x, 0, col)
 				}
 			}
 		}(ch, i)
