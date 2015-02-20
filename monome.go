@@ -24,7 +24,7 @@ var (
 // Connect is a utility method that establishes a connection to the first monome device it finds.
 // The device sends key events to the given channel.
 // It returns ErrTimeout if it can't connec to a device.
-func Connect(prefix string, keyEvents chan KeyEvent) (*Device, error) {
+func Connect(prefix string, keyEvents chan KeyEvent) (*Grid, error) {
 	deviceEvents := make(chan DeviceEvent)
 	so, err := DialSerialOsc("", deviceEvents)
 	if err != nil {
@@ -37,15 +37,15 @@ func Connect(prefix string, keyEvents chan KeyEvent) (*Device, error) {
 	}
 	select {
 	case ev := <-deviceEvents:
-		d, err := DialDevice(":"+strconv.Itoa(int(ev.Port)), prefix, keyEvents)
+		g, err := DialGrid(":"+strconv.Itoa(int(ev.Port)), prefix, keyEvents)
 		if err != nil {
 			return nil, err
 		}
 		// Wait for the Id to become populated.
 		for i := 0; i < 100; i++ {
-			id := d.Id()
+			id := g.Id()
 			if id != "" {
-				return d, nil
+				return g, nil
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -182,8 +182,8 @@ type KeyEvent struct {
 	State int // 1 for down, 0 for up.
 }
 
-// Device represents a connection to a Monome device.
-type Device struct {
+// Grid represents a connection to a Monome device.
+type Grid struct {
 	*oscConnection
 	mu       sync.RWMutex
 	id       string
@@ -194,12 +194,12 @@ type Device struct {
 	events   chan KeyEvent
 }
 
-// DialDevice connects to a Monome device using the given address.
+// DialGrid connects to a Monome device using the given address.
 // The address can be obtained from a SerialOsc.
 // prefix is the OSC address prefix to be used by the local OSC server.
 // If an empty prefix is given, it defaults to /gopher.
 // KeyEvents which are received will be sent in to the given events channel.
-func DialDevice(address, prefix string, events chan KeyEvent) (*Device, error) {
+func DialGrid(address, prefix string, events chan KeyEvent) (*Grid, error) {
 	conn, err := newOscConnection(address)
 	if err != nil {
 		return nil, err
@@ -207,7 +207,7 @@ func DialDevice(address, prefix string, events chan KeyEvent) (*Device, error) {
 	if prefix == "" {
 		prefix = "/gopher"
 	}
-	d := &Device{
+	d := &Grid{
 		oscConnection: conn,
 		prefix:        prefix,
 		events:        events,
@@ -243,45 +243,45 @@ func DialDevice(address, prefix string, events chan KeyEvent) (*Device, error) {
 }
 
 // Height returns the height of the connected Monome device.
-func (d *Device) Height() int {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.height
+func (g *Grid) Height() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.height
 }
 
 // Width returns the width of the connected Monome device.
-func (d *Device) Width() int {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.width
+func (g *Grid) Width() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.width
 }
 
 // Id returns the id of the connected Monome device.
-func (d *Device) Id() string {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.id
+func (g *Grid) Id() string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.id
 }
 
 // Prefix returns the OSC prefinx being used in communication with the connected Monome device.
-func (d *Device) Prefix() string {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.prefix
+func (g *Grid) Prefix() string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.prefix
 }
 
 // Rotation returns the rotation of the connected Monome device.
-func (d *Device) Rotation() int {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.rotation
+func (g *Grid) Rotation() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.rotation
 }
 
-func (d *Device) handlePort(msg *osc.Message) {
+func (g *Grid) handlePort(msg *osc.Message) {
 	return
 }
 
-func (d *Device) handleId(msg *osc.Message) {
+func (g *Grid) handleId(msg *osc.Message) {
 	if msg.CountArguments() != 1 {
 		return
 	}
@@ -289,12 +289,12 @@ func (d *Device) handleId(msg *osc.Message) {
 	if !ok {
 		return
 	}
-	d.mu.Lock()
-	d.id = id
-	d.mu.Unlock()
+	g.mu.Lock()
+	g.id = id
+	g.mu.Unlock()
 }
 
-func (d *Device) handleSize(msg *osc.Message) {
+func (g *Grid) handleSize(msg *osc.Message) {
 	if msg.CountArguments() != 2 {
 		return
 	}
@@ -306,13 +306,13 @@ func (d *Device) handleSize(msg *osc.Message) {
 	if !ok {
 		return
 	}
-	d.mu.Lock()
-	d.width = int(width)
-	d.height = int(height)
-	d.mu.Unlock()
+	g.mu.Lock()
+	g.width = int(width)
+	g.height = int(height)
+	g.mu.Unlock()
 }
 
-func (d *Device) handlePrefix(msg *osc.Message) {
+func (g *Grid) handlePrefix(msg *osc.Message) {
 	if msg.CountArguments() != 1 {
 		return
 	}
@@ -320,12 +320,12 @@ func (d *Device) handlePrefix(msg *osc.Message) {
 	if !ok {
 		return
 	}
-	d.mu.Lock()
-	d.prefix = prefix
-	d.mu.Unlock()
+	g.mu.Lock()
+	g.prefix = prefix
+	g.mu.Unlock()
 }
 
-func (d *Device) handleRotation(msg *osc.Message) {
+func (g *Grid) handleRotation(msg *osc.Message) {
 	if msg.CountArguments() != 1 {
 		return
 	}
@@ -333,12 +333,12 @@ func (d *Device) handleRotation(msg *osc.Message) {
 	if !ok {
 		return
 	}
-	d.mu.Lock()
-	d.rotation = int(rotation)
-	d.mu.Unlock()
+	g.mu.Lock()
+	g.rotation = int(rotation)
+	g.mu.Unlock()
 }
 
-func (d *Device) handleKey(msg *osc.Message) {
+func (g *Grid) handleKey(msg *osc.Message) {
 	if msg.CountArguments() != 3 {
 		return
 	}
@@ -354,7 +354,7 @@ func (d *Device) handleKey(msg *osc.Message) {
 	if !ok {
 		return
 	}
-	d.events <- KeyEvent{int(x), int(y), int(state)}
+	g.events <- KeyEvent{int(x), int(y), int(state)}
 }
 
 func statesInterfaces(states []byte) []interface{} {
@@ -375,71 +375,71 @@ func levelsInterfaces(levels []int) []interface{} {
 
 // LEDSet sets the LED at (x, y) to the given state.
 // State must be 1 for on or 0 for off.
-func (d *Device) LEDSet(x, y, state int) error {
-	return d.send(d.Prefix()+"/grid/led/set", int32(x), int32(y), int32(state))
+func (g *Grid) LEDSet(x, y, state int) error {
+	return g.send(g.Prefix()+"/grid/led/set", int32(x), int32(y), int32(state))
 }
 
 // LEDAll sets all LEDs to the given state.
 // State must be 1 for on or 0 for off.
-func (d *Device) LEDAll(state int) error {
-	return d.send(d.Prefix()+"/grid/led/all", int32(state))
+func (g *Grid) LEDAll(state int) error {
+	return g.send(g.Prefix()+"/grid/led/all", int32(state))
 }
 
 // LEDMap sets an 8x8 grid of LEDs on the monome to the given states.
 // The states are a bitmask with each byte representing one row and each bit representing the state of an LED in that row.
 // xOffset and yOffset must be multiples of 8.
-func (d *Device) LEDMap(xOffset, yOffset int, states [8]byte) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/map", int32(xOffset), int32(yOffset))
+func (g *Grid) LEDMap(xOffset, yOffset int, states [8]byte) error {
+	m := osc.NewMessage(g.Prefix()+"/grid/led/map", int32(xOffset), int32(yOffset))
 	m.Append(statesInterfaces(states[:])...)
-	return d.sendMsg(m)
+	return g.sendMsg(m)
 }
 
-func (d *Device) LEDRow(xOffset, y int, states ...byte) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/row", int32(xOffset), int32(y))
+func (g *Grid) LEDRow(xOffset, y int, states ...byte) error {
+	m := osc.NewMessage(g.Prefix()+"/grid/led/row", int32(xOffset), int32(y))
 	m.Append(statesInterfaces(states)...)
-	return d.sendMsg(m)
+	return g.sendMsg(m)
 }
 
-func (d *Device) LEDCol(x, yOffset int, states ...byte) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/row", int32(x), int32(yOffset))
+func (g *Grid) LEDCol(x, yOffset int, states ...byte) error {
+	m := osc.NewMessage(g.Prefix()+"/grid/led/row", int32(x), int32(yOffset))
 	m.Append(statesInterfaces(states)...)
-	return d.sendMsg(m)
+	return g.sendMsg(m)
 }
 
 // LEDIntensity sets the intensity of the grid LEDs.
-func (d *Device) LEDIntensity(i int) error {
-	return d.send(d.Prefix()+"/grid/led/intensity", int32(i))
+func (g *Grid) LEDIntensity(i int) error {
+	return g.send(g.Prefix()+"/grid/led/intensity", int32(i))
 }
 
 // LEDLevel sets the level of the LED at coordinates x, y. The value of level must be in the range [0, 15].
-func (d *Device) LEDLevelSet(x, y, level int) error {
-	return d.send(d.Prefix()+"/grid/led/level/set", int32(x), int32(y), int32(level))
+func (g *Grid) LEDLevelSet(x, y, level int) error {
+	return g.send(g.Prefix()+"/grid/led/level/set", int32(x), int32(y), int32(level))
 }
 
 // LEDLevelAll sets the level of all LEDs.
-func (d *Device) LEDLevelAll(level int) error {
-	return d.send(d.Prefix()+"/grid/led/level/all", int32(level))
+func (g *Grid) LEDLevelAll(level int) error {
+	return g.send(g.Prefix()+"/grid/led/level/all", int32(level))
 }
 
 // LEDLevelMap is like LEDMap but with control over the level.
-func (d *Device) LEDLevelMap(xOffset, yOffset int, levels [64]int) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/level/map", int32(xOffset), int32(yOffset))
+func (g *Grid) LEDLevelMap(xOffset, yOffset int, levels [64]int) error {
+	m := osc.NewMessage(g.Prefix()+"/grid/led/level/map", int32(xOffset), int32(yOffset))
 	m.Append(levelsInterfaces(levels[:])...)
-	return d.sendMsg(m)
+	return g.sendMsg(m)
 }
 
 // LEDLevelRow is like LEDRow but with control over the level.
-func (d *Device) LEDLevelRow(xOffset, y int, levels []int) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/level/row", int32(xOffset), int32(y))
+func (g *Grid) LEDLevelRow(xOffset, y int, levels []int) error {
+	m := osc.NewMessage(g.Prefix()+"/grid/led/level/row", int32(xOffset), int32(y))
 	m.Append(levelsInterfaces(levels)...)
-	return d.sendMsg(m)
+	return g.sendMsg(m)
 }
 
 // LEDLevelRow is like LEDCol but with control over the level.
-func (d *Device) LEDLevelCol(x, yOffset int, levels []int) error {
-	m := osc.NewMessage(d.Prefix()+"/grid/led/level/col", int32(x), int32(yOffset))
+func (g *Grid) LEDLevelCol(x, yOffset int, levels []int) error {
+	m := osc.NewMessage(g.Prefix()+"/grid/led/level/col", int32(x), int32(yOffset))
 	m.Append(levelsInterfaces(levels)...)
-	return d.sendMsg(m)
+	return g.sendMsg(m)
 }
 
 // LEDBuffer can be used to buffer LED changes to a grid.
@@ -555,10 +555,10 @@ func (b *LEDBuffer) LEDLevelCol(x, yOffset int, levels []int) error {
 	return nil
 }
 
-func (b *LEDBuffer) Render(d *Device) error {
+func (b *LEDBuffer) Render(g *Grid) error {
 	for yOff := 0; yOff < b.height; yOff += 8 {
 		for xOff := 0; xOff < b.width; xOff += 8 {
-			err := d.LEDLevelMap(xOff, yOff, b.levelMap(xOff, yOff))
+			err := g.LEDLevelMap(xOff, yOff, b.levelMap(xOff, yOff))
 			if err != nil {
 				return err
 			}

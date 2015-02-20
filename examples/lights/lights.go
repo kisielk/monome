@@ -12,15 +12,15 @@ import (
 
 func main() {
 	keyEvents := make(chan monome.KeyEvent)
-	device, err := monome.Connect("/lights", keyEvents)
+	grid, err := monome.Connect("/lights", keyEvents)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer device.Close()
+	defer grid.Close()
 	fmt.Printf("Connected to monome id: %s, prefix: %s, width: %d, height: %d, rotation: %d\n",
-		device.Id(), device.Prefix(), device.Width(), device.Height(), device.Rotation())
+		grid.Id(), grid.Prefix(), grid.Width(), grid.Height(), grid.Rotation())
 
-	width, height := device.Width(), device.Height()
+	width, height := grid.Width(), grid.Height()
 
 	ticker := time.NewTicker(2 * time.Second)
 	row := make([]byte, width/8)
@@ -28,7 +28,7 @@ func main() {
 		select {
 		case e := <-keyEvents:
 			if e.State == 1 {
-				device.LEDSet(e.X, e.Y, 1)
+				grid.LEDSet(e.X, e.Y, 1)
 			}
 		case <-ticker.C:
 			for i := 0; i < height; i++ {
@@ -36,7 +36,7 @@ func main() {
 					n := byte(rand.Intn(2))
 					row[j/8] ^= n << uint(j%8)
 				}
-				if err := device.LEDRow(0, i, row...); err != nil {
+				if err := grid.LEDRow(0, i, row...); err != nil {
 					fmt.Println(err)
 					os.Exit(1)
 				}

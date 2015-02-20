@@ -11,15 +11,15 @@ import (
 
 func main() {
 	keyEvents := make(chan monome.KeyEvent)
-	device, err := monome.Connect("/lights", keyEvents)
+	grid, err := monome.Connect("/lights", keyEvents)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer device.Close()
+	defer grid.Close()
 	fmt.Printf("Connected to monome id: %s, prefix: %s, width: %d, height: %d, rotation: %d\n",
-		device.Id(), device.Prefix(), device.Width(), device.Height(), device.Rotation())
+		grid.Id(), grid.Prefix(), grid.Width(), grid.Height(), grid.Rotation())
 
-	width, height := device.Width(), device.Height()
+	width, height := grid.Width(), grid.Height()
 	maxValue := height * 16 // 16 brightness levels per cell
 
 	faders := make([]chan int, width)
@@ -50,7 +50,7 @@ func main() {
 						}
 						col[i] = level
 					}
-					device.LEDLevelCol(x, 0, col)
+					grid.LEDLevelCol(x, 0, col)
 				}
 			}
 		}(ch, i)

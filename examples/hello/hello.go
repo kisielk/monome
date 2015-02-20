@@ -9,16 +9,16 @@ import (
 
 func main() {
 	keyEvents := make(chan monome.KeyEvent)
-	device, err := monome.Connect("/hello", keyEvents)
+	grid, err := monome.Connect("/hello", keyEvents)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer device.Close()
+	defer grid.Close()
 
 	fmt.Printf("Connected to monome id: %s, prefix: %s, width: %d, height: %d, rotation: %d\n",
-		device.Id(), device.Prefix(), device.Width(), device.Height(), device.Rotation())
+		grid.Id(), grid.Prefix(), grid.Width(), grid.Height(), grid.Rotation())
 	for e := range keyEvents {
 		fmt.Printf("%+v\n", e)
-		device.LEDSet(e.X, e.Y, e.State)
+		grid.LEDSet(e.X, e.Y, e.State)
 	}
 }
