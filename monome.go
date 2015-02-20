@@ -3,6 +3,7 @@ package monome
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -439,4 +440,139 @@ func (d *Device) LEDLevelCol(x, yOffset int, levels []int) error {
 	m := osc.NewMessage(d.Prefix()+"/grid/led/level/col", int32(x), int32(yOffset))
 	m.Append(levelsInterfaces(levels)...)
 	return d.sendMsg(m)
+}
+
+// LEDBuffer can be used to buffer LED changes to a grid.
+// It supports all the same LED operations as a Grid, but doesn't send anything
+// until Render is called.
+type LEDBuffer struct {
+	buf    []int
+	width  int
+	height int
+}
+
+func NewLEDBuffer(width, height int) *LEDBuffer {
+	return &LEDBuffer{
+		buf:    make([]int, width*height),
+		width:  width,
+		height: height,
+	}
+}
+
+func (b *LEDBuffer) LEDSet(x, y, state int) error {
+	b.LEDLevelSet(x, y, state*15)
+	return nil
+}
+
+func (b *LEDBuffer) LEDAll(state int) error {
+	b.LEDLevelAll(state * 15)
+	return nil
+}
+
+func (b *LEDBuffer) LEDMap(xOffset, yOffset int, states [8]byte) error {
+	for row, data := range states {
+		b.LEDRow(xOffset, yOffset+row, data)
+	}
+	return nil
+}
+
+func (b *LEDBuffer) LEDRow(xOffset, y int, states ...byte) error {
+	if len(states) > b.width-xOffset {
+		panic(fmt.Errorf("too many states: %d. width (%d) - xOffset (%d) = %d",
+			len(states), b.width, xOffset, b.width-xOffset))
+	}
+
+	for row, data := range states {
+		d := uint(data)
+		for x := 0; x < 8; x++ {
+			state := d & 1 << uint(x)
+			b.LEDSet(xOffset+x, y+row, int(state))
+		}
+	}
+	return nil
+}
+
+func (b *LEDBuffer) LEDCol(x, yOffset int, states ...byte) error {
+	if len(states) > b.height-yOffset {
+		panic(fmt.Errorf("too many levels: %d. height (%d) - yOffset (%d) = %d",
+			len(states), b.height, yOffset, b.height-yOffset))
+	}
+
+	for col, data := range states {
+		d := uint(data)
+		for y := 0; y < 8; y++ {
+			state := d & 1 << uint(y)
+			b.LEDSet(x+col, yOffset+y, int(state))
+		}
+	}
+	return nil
+}
+
+func (b *LEDBuffer) LEDLevelSet(x, y, level int) error {
+	b.buf[x+(y*b.width)] = level
+	return nil
+}
+
+func (b *LEDBuffer) LEDLevelAll(level int) error {
+	for y := 0; y < b.height; y++ {
+		for x := 0; x < b.height; x++ {
+			b.buf[x+(y*b.width)] = level
+		}
+	}
+	return nil
+}
+
+func (b *LEDBuffer) LEDLevelMap(xOffset, yOffset int, levels [64]int) error {
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			b.buf[x+xOffset+(y+yOffset)*b.width] = levels[x+y*8]
+		}
+	}
+	return nil
+}
+
+func (b *LEDBuffer) LEDLevelRow(xOffset, y int, levels []int) error {
+	if len(levels) > b.width-xOffset {
+		panic(fmt.Errorf("too many levels: %d. width (%d) - xOffset (%d) = %d",
+			len(levels), b.width, xOffset, b.width-xOffset))
+	}
+
+	for x, level := range levels {
+		b.buf[xOffset+x+y*b.width] = level
+	}
+	return nil
+}
+
+func (b *LEDBuffer) LEDLevelCol(x, yOffset int, levels []int) error {
+	if len(levels) > b.height-yOffset {
+		panic(fmt.Errorf("too many levels: %d. height (%d) - yOffset (%d) = %d",
+			len(levels), b.height, yOffset, b.height-yOffset))
+	}
+
+	for y, level := range levels {
+		b.buf[x+(y+yOffset)*b.width] = level
+	}
+	return nil
+}
+
+func (b *LEDBuffer) Render(d *Device) error {
+	for yOff := 0; yOff < b.height; yOff += 8 {
+		for xOff := 0; xOff < b.width; xOff += 8 {
+			err := d.LEDLevelMap(xOff, yOff, b.levelMap(xOff, yOff))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (b *LEDBuffer) levelMap(xOffset, yOffset int) [64]int {
+	var m [64]int
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			m[x+y*8] = b.buf[x+xOffset+(y+yOffset)*b.width]
+		}
+	}
+	return m
 }
