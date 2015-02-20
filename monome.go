@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hypebeast/go-osc/osc"
+	"github.com/kisielk/go-osc/osc"
 )
 
 var (
