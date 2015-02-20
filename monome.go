@@ -411,7 +411,7 @@ func (d *Device) LEDIntensity(i int) error {
 }
 
 // LEDLevel sets the level of the LED at coordinates x, y. The value of level must be in the range [0, 15].
-func (d *Device) LEDLevel(x, y, level int) error {
+func (d *Device) LEDLevelSet(x, y, level int) error {
 	return d.send(d.Prefix()+"/grid/led/level/set", int32(x), int32(y), int32(level))
 }
 
