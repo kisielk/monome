@@ -394,12 +394,16 @@ func (g *Grid) LEDMap(xOffset, yOffset int, states [8]byte) error {
 	return g.sendMsg(m)
 }
 
+// LEDRow sets a 8x1 row based on an x offset, a y row and a bitmask. (0-255)
+// Each byte in the states bitmask represents column of leds
 func (g *Grid) LEDRow(xOffset, y int, states ...byte) error {
 	m := osc.NewMessage(g.Prefix()+"/grid/led/row", int32(xOffset), int32(y))
 	m.Append(statesInterfaces(states)...)
 	return g.sendMsg(m)
 }
 
+// LEDCol sets a 1x8 col based on a y offset, an x row and an 8 bit bitmask. (0-255)
+// The states bitmask represents the on/off states of the items in the column
 func (g *Grid) LEDCol(x, yOffset int, states ...byte) error {
 	m := osc.NewMessage(g.Prefix()+"/grid/led/row", int32(x), int32(yOffset))
 	m.Append(statesInterfaces(states)...)
@@ -446,14 +450,14 @@ func (g *Grid) LEDLevelCol(x, yOffset int, levels []int) error {
 // It supports all the same LED operations as a Grid, but doesn't send anything
 // until Render is called.
 type LEDBuffer struct {
-	buf    []int
+	Buf    []int
 	width  int
 	height int
 }
 
 func NewLEDBuffer(width, height int) *LEDBuffer {
 	return &LEDBuffer{
-		buf:    make([]int, width*height),
+		Buf:    make([]int, width*height),
 		width:  width,
 		height: height,
 	}
@@ -509,14 +513,14 @@ func (b *LEDBuffer) LEDCol(x, yOffset int, states ...byte) error {
 }
 
 func (b *LEDBuffer) LEDLevelSet(x, y, level int) error {
-	b.buf[x+(y*b.width)] = level
+	b.Buf[x+(y*b.width)] = level
 	return nil
 }
 
 func (b *LEDBuffer) LEDLevelAll(level int) error {
 	for y := 0; y < b.height; y++ {
 		for x := 0; x < b.height; x++ {
-			b.buf[x+(y*b.width)] = level
+			b.Buf[x+(y*b.width)] = level
 		}
 	}
 	return nil
@@ -525,8 +529,16 @@ func (b *LEDBuffer) LEDLevelAll(level int) error {
 func (b *LEDBuffer) LEDLevelMap(xOffset, yOffset int, levels [64]int) error {
 	for y := 0; y < 8; y++ {
 		for x := 0; x < 8; x++ {
-			b.buf[x+xOffset+(y+yOffset)*b.width] = levels[x+y*8]
+			b.Buf[x+xOffset+(y+yOffset)*b.width] = levels[x+y*8]
 		}
+	}
+	return nil
+}
+
+// Similar to LEDLevelMap but can map buffer to size of device
+func (b *LEDBuffer) LEDLevelMapAll(levels []int) error {
+	for i := 0; i < b.width*b.height; i++ {
+		b.Buf[i] = levels[i]
 	}
 	return nil
 }
@@ -538,7 +550,7 @@ func (b *LEDBuffer) LEDLevelRow(xOffset, y int, levels []int) error {
 	}
 
 	for x, level := range levels {
-		b.buf[xOffset+x+y*b.width] = level
+		b.Buf[xOffset+x+y*b.width] = level
 	}
 	return nil
 }
@@ -550,7 +562,7 @@ func (b *LEDBuffer) LEDLevelCol(x, yOffset int, levels []int) error {
 	}
 
 	for y, level := range levels {
-		b.buf[x+(y+yOffset)*b.width] = level
+		b.Buf[x+(y+yOffset)*b.width] = level
 	}
 	return nil
 }
@@ -571,7 +583,7 @@ func (b *LEDBuffer) levelMap(xOffset, yOffset int) [64]int {
 	var m [64]int
 	for y := 0; y < 8; y++ {
 		for x := 0; x < 8; x++ {
-			m[x+y*8] = b.buf[x+xOffset+(y+yOffset)*b.width]
+			m[x+y*8] = b.Buf[x+xOffset+(y+yOffset)*b.width]
 		}
 	}
 	return m
