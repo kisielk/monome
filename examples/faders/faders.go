@@ -4,12 +4,17 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/kisielk/monome"
 )
 
 func main() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
 	keyEvents := make(chan monome.KeyEvent)
 	grid, err := monome.Connect("/lights", keyEvents)
 	if err != nil {
@@ -30,6 +35,12 @@ func main() {
 			ticker := time.NewTicker(10 * time.Millisecond)
 			for {
 				select {
+				case <-c:
+					fmt.Printf("\nShutting Down...\n")
+					time.Sleep(1 * time.Second)
+					grid.LEDAll(0)
+					grid.Close()
+					os.Exit(0)
 				case v := <-ch:
 					nextValue = v
 				case <-ticker.C:

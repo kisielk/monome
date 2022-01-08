@@ -182,7 +182,7 @@ type KeyEvent struct {
 	State int // 1 for down, 0 for up.
 }
 
-// Grid represents a connection to a Monome device.
+// Grid represents a connection to a Monome device via SerialOsc.
 type Grid struct {
 	*oscConnection
 	mu       sync.RWMutex
@@ -195,7 +195,7 @@ type Grid struct {
 }
 
 // DialGrid connects to a Monome device using the given address.
-// The address can be obtained from a SerialOsc.
+// The address is obtained from SerialOsc running on the local machine.
 // prefix is the OSC address prefix to be used by the local OSC server.
 // If an empty prefix is given, it defaults to /gopher.
 // KeyEvents which are received will be sent in to the given events channel.
@@ -386,7 +386,8 @@ func (g *Grid) LEDAll(state int) error {
 }
 
 // LEDMap sets an 8x8 grid of LEDs on the monome to the given states.
-// The states are a bitmask with each byte representing one row and each bit representing the state of an LED in that row.
+// The states are a bitmask with each byte representing one row and
+// each bit representing the state of an LED in that row.
 // xOffset and yOffset must be multiples of 8.
 func (g *Grid) LEDMap(xOffset, yOffset int, states [8]byte) error {
 	m := osc.NewMessage(g.Prefix()+"/grid/led/map", int32(xOffset), int32(yOffset))
@@ -395,7 +396,7 @@ func (g *Grid) LEDMap(xOffset, yOffset int, states [8]byte) error {
 }
 
 // LEDRow sets a 8x1 row based on an x offset, a y row and a bitmask. (0-255)
-// Each byte in the states bitmask represents column of leds
+// The states bitmask represents the on/off states of the items in the row
 func (g *Grid) LEDRow(xOffset, y int, states ...byte) error {
 	m := osc.NewMessage(g.Prefix()+"/grid/led/row", int32(xOffset), int32(y))
 	m.Append(statesInterfaces(states)...)
@@ -447,14 +448,16 @@ func (g *Grid) LEDLevelCol(x, yOffset int, levels []int) error {
 }
 
 // LEDBuffer can be used to buffer LED changes to a grid.
-// It supports all the same LED operations as a Grid, but doesn't send anything
-// until Render is called.
+// It supports all the same LED operations as a Grid, but
+// doesn't send anything until buffer.Render() is called.
 type LEDBuffer struct {
 	Buf    []int
 	width  int
 	height int
 }
 
+// Creates a new LEDBuffer with exposed .Buf value for direct
+// manipulation. Requires width and height to calculate size.
 func NewLEDBuffer(width, height int) *LEDBuffer {
 	return &LEDBuffer{
 		Buf:    make([]int, width*height),
@@ -463,16 +466,20 @@ func NewLEDBuffer(width, height int) *LEDBuffer {
 	}
 }
 
+// Sets a single led in an LEDBuffer, either on (1) or off (0)
 func (b *LEDBuffer) LEDSet(x, y, state int) error {
 	b.LEDLevelSet(x, y, state*15)
 	return nil
 }
 
+// Sets all leds in an LEDBuffer, either on (1) or off (0)
 func (b *LEDBuffer) LEDAll(state int) error {
 	b.LEDLevelAll(state * 15)
 	return nil
 }
 
+// Writes an 8x8 quadrant of grid values to an LEDBuffer
+// states accepts a bitmask for each row of the quadrant
 func (b *LEDBuffer) LEDMap(xOffset, yOffset int, states [8]byte) error {
 	for row, data := range states {
 		b.LEDRow(xOffset, yOffset+row, data)
@@ -480,6 +487,7 @@ func (b *LEDBuffer) LEDMap(xOffset, yOffset int, states [8]byte) error {
 	return nil
 }
 
+// Writes a Row of values to an LEDBuffer, states is a bitmask of values
 func (b *LEDBuffer) LEDRow(xOffset, y int, states ...byte) error {
 	if len(states) > b.width-xOffset {
 		panic(fmt.Errorf("too many states: %d. width (%d) - xOffset (%d) = %d",
@@ -496,6 +504,7 @@ func (b *LEDBuffer) LEDRow(xOffset, y int, states ...byte) error {
 	return nil
 }
 
+// Writes a column of values to an LEDBuffer, states is a bitmask of values
 func (b *LEDBuffer) LEDCol(x, yOffset int, states ...byte) error {
 	if len(states) > b.height-yOffset {
 		panic(fmt.Errorf("too many levels: %d. height (%d) - yOffset (%d) = %d",
@@ -512,11 +521,13 @@ func (b *LEDBuffer) LEDCol(x, yOffset int, states ...byte) error {
 	return nil
 }
 
+// Writes a single led value at x,y with varibright level values 0-15 to an LEDBuffer
 func (b *LEDBuffer) LEDLevelSet(x, y, level int) error {
 	b.Buf[x+(y*b.width)] = level
 	return nil
 }
 
+// Writes a single varibright level values 0-15 to an LEDBuffer
 func (b *LEDBuffer) LEDLevelAll(level int) error {
 	for y := 0; y < b.height; y++ {
 		for x := 0; x < b.height; x++ {
@@ -526,6 +537,7 @@ func (b *LEDBuffer) LEDLevelAll(level int) error {
 	return nil
 }
 
+// Writes an 8x8 quadrant of varibright values to an LEDBuffer, values 0-15
 func (b *LEDBuffer) LEDLevelMap(xOffset, yOffset int, levels [64]int) error {
 	for y := 0; y < 8; y++ {
 		for x := 0; x < 8; x++ {
@@ -535,7 +547,8 @@ func (b *LEDBuffer) LEDLevelMap(xOffset, yOffset int, levels [64]int) error {
 	return nil
 }
 
-// Similar to LEDLevelMap but can map buffer to size of device
+// Similar to LEDLevelMap but can map LEDBuffer to arbitrary size of device,
+// sice should contain enough values for target grid takes varibright level values 0-15
 func (b *LEDBuffer) LEDLevelMapAll(levels []int) error {
 	for i := 0; i < b.width*b.height; i++ {
 		b.Buf[i] = levels[i]
@@ -543,6 +556,7 @@ func (b *LEDBuffer) LEDLevelMapAll(levels []int) error {
 	return nil
 }
 
+// Writes a row of data to a LEDBuffer, uses varibright levels 0-15
 func (b *LEDBuffer) LEDLevelRow(xOffset, y int, levels []int) error {
 	if len(levels) > b.width-xOffset {
 		panic(fmt.Errorf("too many levels: %d. width (%d) - xOffset (%d) = %d",
@@ -555,6 +569,7 @@ func (b *LEDBuffer) LEDLevelRow(xOffset, y int, levels []int) error {
 	return nil
 }
 
+// Writes a column of data to a LEDBuffer, uses varibright levels 0-15
 func (b *LEDBuffer) LEDLevelCol(x, yOffset int, levels []int) error {
 	if len(levels) > b.height-yOffset {
 		panic(fmt.Errorf("too many levels: %d. height (%d) - yOffset (%d) = %d",
@@ -567,6 +582,8 @@ func (b *LEDBuffer) LEDLevelCol(x, yOffset int, levels []int) error {
 	return nil
 }
 
+// Renders a LEDBuffer using LEDLevelMap which only requires one osc message
+// per 8x8 quadrant.
 func (b *LEDBuffer) Render(g *Grid) error {
 	for yOff := 0; yOff < b.height; yOff += 8 {
 		for xOff := 0; xOff < b.width; xOff += 8 {

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/signal"
 	"time"
@@ -13,7 +12,6 @@ import (
 
 func main() {
 	c := make(chan os.Signal, 1)
-
 	signal.Notify(c, os.Interrupt)
 
 	keyEvents := make(chan monome.KeyEvent)
@@ -23,34 +21,32 @@ func main() {
 	}
 
 	b := monome.NewLEDBuffer(grid.Width(), grid.Height())
-	rand.Seed(time.Now().UnixNano())
+	b.LEDAll(0)
 
-	// fill buffer with random values from 0-15
-	for i := range b.Buf {
-		b.Buf[i] = rand.Intn(15-0) + 0
-	}
-
-	b.Render(grid)
-
+	fmt.Println("Hello, press some keys on your grid!")
 	fmt.Printf("Connected to monome id: %s, prefix: %s, width: %d, height: %d, rotation: %d\n",
 		grid.Id(), grid.Prefix(), grid.Width(), grid.Height(), grid.Rotation())
 
 	go func() {
 		<-c
-		fmt.Printf("\nCleaning up\n\n")
+		fmt.Printf("\nShutting Down...\n")
 		time.Sleep(1 * time.Second)
 		grid.LEDAll(0)
 		grid.Close()
-		os.Exit(1)
+		os.Exit(0)
 	}()
 
 	for e := range keyEvents {
 		fmt.Printf("%+v\n", e)
-		if e.State == 1 {
-			grid.LEDSet(e.X, e.Y, e.State)
-		} else {
-			grid.LEDLevelSet(e.X, e.Y, b.Buf[(e.Y*grid.Width())+e.X])
+		s := b.Buf[e.X+(e.Y*grid.Width())]
+		if e.State == 0 {
+			if s == 15 {
+				s = 0
+			} else {
+				s = 15
+			}
+			b.LEDLevelSet(e.X, e.Y, s)
+			b.Render(grid)
 		}
 	}
-
 }
