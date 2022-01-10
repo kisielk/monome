@@ -18,7 +18,8 @@ type gridmsg struct {
 
 func main() {
 	gmc := make(chan gridmsg, 1)
-	handleWs := makeWsHandler(gmc)
+	gmk := make(chan gridmsg, 1)
+	handleWs := makeWsHandler(gmc, gmk)
 	kec := make(chan monome.KeyEvent, 1)
 	grid, err := monome.Connect("/gridserver", kec)
 	if err != nil {
@@ -29,7 +30,7 @@ func main() {
 	localBuffer := monome.NewLEDBuffer(grid.Width(), grid.Height())
 
 	go webGridMessageHandler(gmc, *grid, localBuffer)
-	go gridKeyHandler(kec, *grid, localBuffer)
+	go gridKeyHandler(kec, *grid, localBuffer, gmk)
 
 	grid.LEDAll(0)
 
@@ -40,9 +41,10 @@ func main() {
 	panic(http.ListenAndServe(":8080", nil))
 }
 
-func makeWsHandler(c chan gridmsg) func(http.ResponseWriter, *http.Request) {
+func makeWsHandler(c chan gridmsg, gm chan gridmsg) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gmc := c
+		gmk := gm
 		conn, err := websocket.Upgrade(w, r, w.Header(), 1024, 1024)
 		if err != nil {
 			http.Error(w, "could not open websocket connection", http.StatusBadRequest)
@@ -50,6 +52,7 @@ func makeWsHandler(c chan gridmsg) func(http.ResponseWriter, *http.Request) {
 
 		log.Printf(":: web client connected")
 
+		go localGridMessageHandler(conn, gmk)
 		readWs(conn, gmc)
 	}
 }
@@ -65,26 +68,42 @@ func readWs(conn *websocket.Conn, gmc chan gridmsg) {
 
 		gmc <- m
 
-		if err = conn.WriteJSON(m); err != nil {
+	}
+}
+
+func gridKeyHandler(gke chan monome.KeyEvent, g monome.Grid, localBuffer *monome.LEDBuffer, gmk chan gridmsg) {
+	for {
+		m := <-gke
+		i := localBuffer.GetIndexFromXY(m.X, m.Y)
+		if m.State == 1 {
+			if localBuffer.Buf[i] == 0 {
+				localBuffer.Buf[i] = 15
+			} else {
+				localBuffer.Buf[i] = 0
+			}
+		}
+		localBuffer.Render(&g)
+		gmk <- gridmsg{Cmd: "fromGridBuffer", Data: localBuffer.Buf}
+	}
+}
+
+func localGridMessageHandler(conn *websocket.Conn, gmk chan gridmsg) {
+	for {
+		m := <-gmk
+		err := conn.WriteJSON(m)
+		if err != nil {
 			fmt.Println(err)
 		}
 	}
 }
 
-func gridKeyHandler(gke chan monome.KeyEvent, g monome.Grid, localBuffer *monome.LEDBuffer) {
-	for {
-		m := <-gke
-		i := localBuffer.GetIndexFromXY(m.X, m.Y)
-	}
-}
-
-func webGridMessageHandler(gmc chan gridmsg, g monome.Grid, localBuffer *monome.LEDBuffer) {
+func webGridMessageHandler(gmc chan gridmsg, g monome.Grid, b *monome.LEDBuffer) {
 	for {
 		m := <-gmc
 		switch m.Cmd {
 		case "levelMap":
-			localBuffer.Buf = m.Data
-			localBuffer.Render(&g)
+			b.Buf = m.Data
+			b.Render(&g)
 		}
 	}
 }

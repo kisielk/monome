@@ -1,4 +1,4 @@
-module github.com/forrestbaer/monome
+module github.com/kisielk/monome
 
 go 1.17
 

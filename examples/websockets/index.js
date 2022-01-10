@@ -73,7 +73,12 @@ const newGrid = (columns, rows, wrapperEl) => {
   }
 
   grid.handleMessage = (m) => {
-    grid.render()
+    m = JSON.parse(m)
+    switch (m.Cmd) {
+      case 'fromGridBuffer':
+        grid.buffer.data = m.Data
+        grid.render()
+    }
   }
   
   grid.clickEvent = (x,y,b,e) => {
@@ -81,6 +86,7 @@ const newGrid = (columns, rows, wrapperEl) => {
     let i = grid.getIndexFromXY(x,y)
     grid.buffer.data[i] = grid.buffer.data[i] === 0 ? 15 : 0
     let bd = {Cmd: 'levelMap', Data: grid.buffer.data}
+    grid.render()
     ws.send(JSON.stringify(bd))
   }
 
