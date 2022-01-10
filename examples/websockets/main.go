@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os/exec"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/kisielk/monome"
@@ -17,17 +19,24 @@ type gridmsg struct {
 func main() {
 	gmc := make(chan gridmsg, 1)
 	handleWs := makeWsHandler(gmc)
-	keyEvents := make(chan monome.KeyEvent, 1)
-	grid, err := monome.Connect("/gridserver", keyEvents)
+	kec := make(chan monome.KeyEvent, 1)
+	grid, err := monome.Connect("/gridserver", kec)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf(":: grid was connected %v\n", grid.Id())
-	go gridMessageHandler(gmc, *grid)
+
+	localBuffer := monome.NewLEDBuffer(grid.Width(), grid.Height())
+
+	go webGridMessageHandler(gmc, *grid, localBuffer)
+	go gridKeyHandler(kec, *grid, localBuffer)
+
+	grid.LEDAll(0)
 
 	http.Handle("/", http.FileServer(http.Dir(".")))
 	http.HandleFunc("/ws", handleWs)
 
+	go waitForServer()
 	panic(http.ListenAndServe(":8080", nil))
 }
 
@@ -39,7 +48,7 @@ func makeWsHandler(c chan gridmsg) func(http.ResponseWriter, *http.Request) {
 			http.Error(w, "could not open websocket connection", http.StatusBadRequest)
 		}
 
-		log.Printf(":: client connected")
+		log.Printf(":: web client connected")
 
 		readWs(conn, gmc)
 	}
@@ -62,30 +71,42 @@ func readWs(conn *websocket.Conn, gmc chan gridmsg) {
 	}
 }
 
-func gridMessageHandler(gmc chan gridmsg, g monome.Grid) {
+func gridKeyHandler(gke chan monome.KeyEvent, g monome.Grid, localBuffer *monome.LEDBuffer) {
 	for {
-		m := <-gmc
-		fmt.Printf("%s, %d, %d\n", m.Cmd, m.Data[0], m.Data[1])
-		g.LEDSet(m.Data[0], m.Data[1], 1)
+		m := <-gke
+		i := localBuffer.GetIndexFromXY(m.X, m.Y)
 	}
 }
 
-// sigs := make(chan os.Signal, 1)
-// signal.Notify(sigs, os.Interrupt)
+func webGridMessageHandler(gmc chan gridmsg, g monome.Grid, localBuffer *monome.LEDBuffer) {
+	for {
+		m := <-gmc
+		switch m.Cmd {
+		case "levelMap":
+			localBuffer.Buf = m.Data
+			localBuffer.Render(&g)
+		}
+	}
+}
 
-// select {
-// case err := <-errc:
-// 	log.Printf("failed to serve: %v", err)
-// case <-sigs:
-// 	fmt.Printf("\nclosing :: shutting down gridServer..\n")
-// 	time.Sleep(1 * time.Second)
-// 	grid.LEDAll(0)
-// 	grid.Close()
-// 	os.Exit(0)
-// }
+func waitForServer() {
+	for {
+		time.Sleep(time.Second * 2)
 
-// ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-// defer cancel()
+		log.Println(":: checking webserver status")
+		resp, err := http.Get("http://localhost:8080")
+		if err != nil {
+			log.Println(":: server not ready")
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Println(":: not ok:", resp.StatusCode)
+			continue
+		}
 
-// return s.Shutdown(ctx)
-// }
+		break
+	}
+	fmt.Println(":: server running, opening browser")
+	exec.Command("open", "http://localhost:8080").Run()
+}

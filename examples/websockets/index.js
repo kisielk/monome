@@ -16,7 +16,7 @@ function initWS() {
     console.log('connection made')
   })
   socket.addEventListener('message', (e) => {
-    console.info(`received something ${e.data}`)
+    grid.handleMessage(e.data)
   })
   socket.addEventListener('close', () => {
     console.log('connection closed')
@@ -32,7 +32,6 @@ const newGrid = (columns, rows, wrapperEl) => {
   const wrapper = document.getElementById(wrapperEl)
   const grid = {}
 
-  grid.clickEvent = () => {}
   grid.size = rows*columns
   grid.rows = rows
   grid.columns = columns
@@ -53,9 +52,8 @@ const newGrid = (columns, rows, wrapperEl) => {
   wrapper.append(grid.el)
 
   const newButton = (i) => {
-    let x = i % grid.columns;
-    let y = Math.floor(i / grid.columns);
     let button = document.createElement('button')
+    let [x, y] = grid.getXYFromIndex(i)
 
     button.classList.add('button_'+i)
     button.classList.add('grid_button')
@@ -64,8 +62,31 @@ const newGrid = (columns, rows, wrapperEl) => {
     return button
   }
 
+  grid.getIndexFromXY = (x, y) => {
+    return (y*grid.columns) + x
+  }
+
+  grid.getXYFromIndex = (i) => {
+    let x = i % grid.columns;
+    let y = Math.floor(i / grid.columns);
+    return [x, y]
+  }
+
+  grid.handleMessage = (m) => {
+    grid.render()
+  }
+  
+  grid.clickEvent = (x,y,b,e) => {
+    e.preventDefault()
+    let i = grid.getIndexFromXY(x,y)
+    grid.buffer.data[i] = grid.buffer.data[i] === 0 ? 15 : 0
+    let bd = {Cmd: 'levelMap', Data: grid.buffer.data}
+    ws.send(JSON.stringify(bd))
+  }
+
   grid.paint = () => {
     for (let i = 0; i < grid.size; i++) {
+      grid.buffer.data[i] = 0
       grid.buttons[i] = newButton(i)
       grid.el.append(grid.buttons[i])
     }
@@ -88,6 +109,7 @@ const newGrid = (columns, rows, wrapperEl) => {
       }
     })
   }
+
   return grid
 }
 
@@ -97,12 +119,6 @@ const newGrid = (columns, rows, wrapperEl) => {
 const grid = newGrid(16, 8, 'wrapper')
 grid.paint()
 
-grid.clickEvent = (x,y,b,e) => {
-  e.preventDefault()
-  console.log(x, y, b)
-  ws.send(JSON.stringify({Cmd: 'setled', Data: [ x, y ]}))
-}
-
 randomizeBuffer = (grid) => {
   for (let i = 0; i < grid.size; i++) {
     grid.buffer.data[i] = Math.floor(Math.random() * 15)
@@ -111,6 +127,5 @@ randomizeBuffer = (grid) => {
 
 //randomizeBuffer(grid)
 grid.render()
-
 
 })()
