@@ -4,6 +4,7 @@ package monome
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"sync"
@@ -464,6 +465,19 @@ func NewLEDBuffer(width, height int) *LEDBuffer {
 		width:  width,
 		height: height,
 	}
+}
+
+// Returns the index of the LEDBuffer given x and y coordinates
+func (b *LEDBuffer) GetIndexFromXY(x, y int) int {
+	index := (y * b.width) + x
+	return index
+}
+
+// Returns the x and y coortinate values given an LEDBuffer index
+func (b *LEDBuffer) GetXYFromIndex(i int) []int {
+	x := int(i % b.width)
+	y := int(math.Floor(float64(i) / float64(b.width)))
+	return []int{x, y}
 }
 
 // Sets a single led in an LEDBuffer, either on (1) or off (0)
