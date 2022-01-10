@@ -1,6 +1,8 @@
-github.com/gorilla/websocket v1.4.1 h1:q7AeDBpnBk8AogcD4DSag/Ukw/KV+YhzLj2bP5HvKCM=
-github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
+github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/kisielk/go-osc v0.0.0-20150323163941-f2f83b76cb24 h1:YcqtGO8mRJg2c4gbtEUpuDsISmeMG1PO0jJA0PeD0/o=
 github.com/kisielk/go-osc v0.0.0-20150323163941-f2f83b76cb24/go.mod h1:QiOpPuG7wbfFLbyG61ItV2KIoCDVG7OmYHW7pj51n9w=
 github.com/kisielk/monome v0.0.0-20220108173125-0490078419fd h1:2MuhU0YbkrNx55pCy+Yswag2JXqGdSQwMkh4tA2j/CI=
 github.com/kisielk/monome v0.0.0-20220108173125-0490078419fd/go.mod h1:VLiEyAjRa+uslj2VmCqYaQZlFrh/lG7SHxYly6BN7H8=
+github.com/kisielk/monome v0.0.0-20220110231529-d50cbcf26d35 h1:u5ksE5KxfwPfVBxn4fxy0tfETHnBdrvC8gR+gWCxUZk=
+github.com/kisielk/monome v0.0.0-20220110231529-d50cbcf26d35/go.mod h1:VLiEyAjRa+uslj2VmCqYaQZlFrh/lG7SHxYly6BN7H8=
