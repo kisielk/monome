@@ -124,14 +124,6 @@ const newGrid = (columns, rows, wrapperEl) => {
 //
 const grid = newGrid(16, 8, 'wrapper')
 grid.paint()
-
-randomizeBuffer = (grid) => {
-  for (let i = 0; i < grid.size; i++) {
-    grid.buffer.data[i] = Math.floor(Math.random() * 15)
-  }
-}
-
-//randomizeBuffer(grid)
 grid.render()
 
 })()
