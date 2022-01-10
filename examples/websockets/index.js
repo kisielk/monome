@@ -1,3 +1,29 @@
+;(() => {
+
+var ws
+
+if (window.WebSocket === undefined) {
+  console.error('use a web browser that supports websockets you fossil')
+  return;
+} else {
+  ws = initWS();
+}
+
+function initWS() {
+  var socket = new WebSocket("ws://localhost:8080/ws")
+
+  socket.addEventListener('open', () => {
+    console.log('connection made')
+  })
+  socket.addEventListener('message', (e) => {
+    console.info(`received something ${e.data}`)
+  })
+  socket.addEventListener('close', () => {
+    console.log('connection closed')
+  })
+
+  return socket;
+}
 
 //
 // create new grid object of size columns/rows inside a wrapper element
@@ -71,8 +97,10 @@ const newGrid = (columns, rows, wrapperEl) => {
 const grid = newGrid(16, 8, 'wrapper')
 grid.paint()
 
-grid.clickEvent = (x,y,t) => {
-  console.log(x, y, t)
+grid.clickEvent = (x,y,b,e) => {
+  e.preventDefault()
+  console.log(x, y, b)
+  ws.send(JSON.stringify({Cmd: 'setled', Data: [ x, y ]}))
 }
 
 randomizeBuffer = (grid) => {
@@ -81,6 +109,8 @@ randomizeBuffer = (grid) => {
   }
 }
 
-randomizeBuffer(grid)
+//randomizeBuffer(grid)
 grid.render()
 
+
+})()
