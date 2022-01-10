@@ -1,0 +1,43 @@
+body {
+  background: #111;
+}
+
+#wrapper {
+  box-sizing: border-box;
+  padding: 20px 0;
+  margin: 0 auto;
+  text-align: center;
+}
+
+#grid {
+  width: auto;
+  background: #A1A1A1;
+  border-radius: 15px;
+  padding: 20px;
+  grid-gap: 5px;
+  display: inline-grid;
+  box-sizing: border-box;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#grid.visible {
+  opacity: 1;
+}
+
+#grid button {
+  box-sizing: border-box;
+  border: 2px solid #999;
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  background: #AAA;
+  place-self: center;
+  transition: border 0.3s ease;
+}
+
+#grid button:hover,
+#grid button:focus {
+  border: 2px solid rgba(55, 55, 55, 0.7);
+  cursor: pointer;
+}
